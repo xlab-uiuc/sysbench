@@ -64,6 +64,11 @@
 # include <limits.h>
 #endif
 
+#include <fcntl.h>
+#include <string.h>
+#include <unistd.h>
+#include <assert.h>
+
 #include <luajit.h>
 
 #include "sysbench.h"
@@ -119,7 +124,8 @@ sb_arg_t general_args[] =
   SB_OPT("luajit-cmd", "perform LuaJIT control command. This option is "
          "equivalent to 'luajit -j'. See LuaJIT documentation for more "
          "information", NULL, STRING),
-
+      SB_OPT("perf_ctl_fifo", "control fifo for perf", NULL, STRING),
+          SB_OPT("perf_ack_fifo", "control fifo for perf", NULL, STRING),
   SB_OPT_END
 };
 
@@ -165,9 +171,40 @@ sb_timer_t sb_checkpoint_timer   CK_CC_CACHELINE;
 
 TLS int sb_tls_thread_id;
 
+int perf_ctl_fd = -1;
+int perf_ack_fd = -1;
+
 static void print_header(void);
 static void print_help(void);
 static void print_run_mode(sb_test_t *);
+
+static void enable_perf(void)
+{
+  char ack[5];
+	if (perf_ctl_fd != -1) {
+		ssize_t bytes_written = write(perf_ctl_fd, "enable\n", 8);
+    assert(bytes_written == 8);
+	}
+  if (perf_ack_fd != -1) {
+    ssize_t bytes_read = read(perf_ack_fd, ack, 5);
+    assert(bytes_read == 5 && strcmp(ack, "ack\n") == 0);
+  }
+  
+}
+
+static void disable_perf(void)
+{
+  char ack[5];
+	if (perf_ctl_fd != -1) {
+		ssize_t bytes_written = write(perf_ctl_fd, "disable\n", 9);
+    assert(bytes_written == 8);
+	}
+
+  if (perf_ack_fd != -1) {
+    ssize_t bytes_read = read(perf_ack_fd, ack, 5);
+    assert(bytes_read == 5 && strcmp(ack, "ack\n") == 0);
+  }
+}
 
 #ifdef HAVE_ALARM
 static void sigalrm_thread_init_timeout_handler(int sig)
@@ -1043,7 +1080,7 @@ static int threads_started_callback(void *arg)
   sb_timer_start(&sb_exec_timer);
   sb_timer_copy(&sb_intermediate_timer, &sb_exec_timer);
   sb_timer_copy(&sb_checkpoint_timer, &sb_exec_timer);
-
+  enable_perf();
   log_text(LOG_NOTICE, "Threads started!\n");
 
   return 0;
@@ -1201,6 +1238,7 @@ static int run_test(sb_test_t *test)
   if ((err = sb_thread_join_workers()))
     return err;
 
+  disable_perf();
   sb_timer_stop(&sb_exec_timer);
   sb_timer_stop(&sb_intermediate_timer);
   sb_timer_stop(&sb_checkpoint_timer);
@@ -1434,6 +1472,14 @@ static int init(void)
   return 0;
 }
 
+static int get_fifo_fd(const char * fifo_name, int flags) {
+  int fd = open(fifo_name, flags);
+  if (fd == -1) {
+    perror("open");
+    exit(EXIT_FAILURE);
+  }
+  return fd;
+}
 
 int main(int argc, char *argv[])
 {
@@ -1461,6 +1507,13 @@ int main(int argc, char *argv[])
   /* Parse command line arguments */
   if (parse_general_arguments(argc, argv))
     return EXIT_FAILURE;
+
+  if (sb_get_value_string("perf_ctl_fifo") && sb_get_value_string("perf_ack_fifo")) {
+    perf_ctl_fd = get_fifo_fd(sb_get_value_string("perf_ctl_fifo"), O_WRONLY);
+    perf_ack_fd = get_fifo_fd(sb_get_value_string("perf_ack_fifo"), O_RDONLY);
+    log_text(LOG_INFO, "perf_ctl_fd = %d, perf_ack_fd = %d", perf_ctl_fd, perf_ack_fd);
+  }
+  
 
   if (sb_get_value_flag("help"))
   {
