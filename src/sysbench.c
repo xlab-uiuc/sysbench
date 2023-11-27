@@ -189,12 +189,13 @@ static void enable_perf(void)
     ssize_t bytes_read = read(perf_ack_fd, ack, 5);
     assert(bytes_read == 5 && strcmp(ack, "ack\n") == 0);
   }
-  
+  __asm__ volatile ("xchgq %r10, %r10");
 }
 
 static void disable_perf(void)
 {
   char ack[5];
+  __asm__ volatile ("xchgq %r11, %r11");
 	if (perf_ctl_fd != -1) {
 		ssize_t bytes_written = write(perf_ctl_fd, "disable\n", 9);
     assert(bytes_written == 8);
