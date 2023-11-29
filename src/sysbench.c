@@ -198,7 +198,7 @@ static void disable_perf(void)
   __asm__ volatile ("xchgq %r11, %r11");
 	if (perf_ctl_fd != -1) {
 		ssize_t bytes_written = write(perf_ctl_fd, "disable\n", 9);
-    assert(bytes_written == 8);
+    assert(bytes_written == 9);
 	}
 
   if (perf_ack_fd != -1) {
