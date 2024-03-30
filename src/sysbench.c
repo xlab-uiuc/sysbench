@@ -181,6 +181,9 @@ static void print_run_mode(sb_test_t *);
 static void enable_perf(void)
 {
   char ack[5];
+  #define SYS_show_pgtable 600
+  long res = syscall(SYS_show_pgtable);
+  printf("System call returned %ld\n", res);
 	if (perf_ctl_fd != -1) {
 		ssize_t bytes_written = write(perf_ctl_fd, "enable\n", 8);
     assert(bytes_written == 8);
