@@ -126,6 +126,7 @@ sb_arg_t general_args[] =
          "information", NULL, STRING),
       SB_OPT("perf_ctl_fifo", "control fifo for perf", NULL, STRING),
           SB_OPT("perf_ack_fifo", "control fifo for perf", NULL, STRING),
+      SB_OPT("record_stage", "record stage 0 for nothing 1 for running, 2 for loading.", "1", INT),
   SB_OPT_END
 };
 
@@ -173,15 +174,20 @@ TLS int sb_tls_thread_id;
 
 int perf_ctl_fd = -1;
 int perf_ack_fd = -1;
+int record_stage = 1;
+
+#define RECORD_RUNNING 1
+#define RECORD_LOADING 2
 
 static void print_header(void);
 static void print_help(void);
 static void print_run_mode(sb_test_t *);
 
+#define SYS_show_pgtable 600
+
 static void enable_perf(void)
 {
   char ack[5];
-  #define SYS_show_pgtable 600
   long res = syscall(SYS_show_pgtable);
   printf("System call returned %ld\n", res);
 	if (perf_ctl_fd != -1) {
@@ -199,6 +205,8 @@ static void disable_perf(void)
 {
   char ack[5];
   __asm__ volatile ("xchgq %r11, %r11");
+  long res = syscall(SYS_show_pgtable);
+  printf("System call returned %ld\n", res);
 	if (perf_ctl_fd != -1) {
 		ssize_t bytes_written = write(perf_ctl_fd, "disable\n", 9);
     assert(bytes_written == 9);
@@ -1084,7 +1092,11 @@ static int threads_started_callback(void *arg)
   sb_timer_start(&sb_exec_timer);
   sb_timer_copy(&sb_intermediate_timer, &sb_exec_timer);
   sb_timer_copy(&sb_checkpoint_timer, &sb_exec_timer);
-  enable_perf();
+
+  if (record_stage & RECORD_RUNNING) {
+    enable_perf();
+  }
+  
   log_text(LOG_NOTICE, "Threads started!\n");
 
   return 0;
@@ -1105,8 +1117,16 @@ static int run_test(sb_test_t *test)
   uint64_t     old_max_events = 0;
 
   /* initialize test */
+  if (record_stage & RECORD_LOADING) {
+    enable_perf();
+  }
+  
   if (test->ops.init != NULL && test->ops.init() != 0)
     return 1;
+
+  if (record_stage & RECORD_LOADING) {
+    disable_perf();
+  }
   
   /* print test mode */
   print_run_mode(test);
@@ -1242,7 +1262,9 @@ static int run_test(sb_test_t *test)
   if ((err = sb_thread_join_workers()))
     return err;
 
-  disable_perf();
+  if (record_stage & RECORD_RUNNING) {
+    disable_perf();
+  }
   sb_timer_stop(&sb_exec_timer);
   sb_timer_stop(&sb_intermediate_timer);
   sb_timer_stop(&sb_checkpoint_timer);
@@ -1516,6 +1538,11 @@ int main(int argc, char *argv[])
     perf_ctl_fd = get_fifo_fd(sb_get_value_string("perf_ctl_fifo"), O_WRONLY);
     perf_ack_fd = get_fifo_fd(sb_get_value_string("perf_ack_fifo"), O_RDONLY);
     log_text(LOG_INFO, "perf_ctl_fd = %d, perf_ack_fd = %d", perf_ctl_fd, perf_ack_fd);
+  }
+
+  if (sb_get_value_int("record_stage")) {
+    record_stage = sb_get_value_int("record_stage");
+    log_text(LOG_INFO, "record_stage = %d", record_stage);
   }
   
 
