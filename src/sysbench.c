@@ -1540,11 +1540,8 @@ int main(int argc, char *argv[])
     log_text(LOG_INFO, "perf_ctl_fd = %d, perf_ack_fd = %d", perf_ctl_fd, perf_ack_fd);
   }
 
-  if (sb_get_value_int("record_stage")) {
-    record_stage = sb_get_value_int("record_stage");
-    log_text(LOG_INFO, "record_stage = %d", record_stage);
-  }
-  
+  record_stage = sb_get_value_int("record_stage");
+  log_text(LOG_INFO, "record_stage = %d", record_stage);  
 
   if (sb_get_value_flag("help"))
   {
