@@ -1093,7 +1093,7 @@ static int threads_started_callback(void *arg)
   sb_timer_copy(&sb_intermediate_timer, &sb_exec_timer);
   sb_timer_copy(&sb_checkpoint_timer, &sb_exec_timer);
 
-  if (record_stage & RECORD_RUNNING) {
+  if (record_stage == RECORD_RUNNING) {
     enable_perf();
   }
   
@@ -1117,14 +1117,14 @@ static int run_test(sb_test_t *test)
   uint64_t     old_max_events = 0;
 
   /* initialize test */
-  if (record_stage & RECORD_LOADING) {
+  if (record_stage == RECORD_LOADING) {
     enable_perf();
   }
   
   if (test->ops.init != NULL && test->ops.init() != 0)
     return 1;
 
-  if (record_stage & RECORD_LOADING) {
+  if (record_stage == RECORD_LOADING) {
     disable_perf();
   }
   
@@ -1262,7 +1262,7 @@ static int run_test(sb_test_t *test)
   if ((err = sb_thread_join_workers()))
     return err;
 
-  if (record_stage & RECORD_RUNNING) {
+  if (record_stage == RECORD_RUNNING) {
     disable_perf();
   }
   sb_timer_stop(&sb_exec_timer);
