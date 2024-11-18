@@ -20,6 +20,10 @@
 # include "config.h"
 #endif
 
+#include <fcntl.h>
+#include <string.h>
+#include <unistd.h>
+#include <assert.h>
 #include "sysbench.h"
 #include "sb_rand.h"
 
@@ -51,6 +55,30 @@ static sb_arg_t memory_args[] =
 
   SB_OPT_END
 };
+
+/* PERF */
+#define RECORD_LOADING_END 3
+#define SYS_show_pgtable 600
+
+extern int record_stage;
+extern int perf_ctl_fd;
+extern int perf_ack_fd;
+
+static void enable_perf(void)
+{
+  char ack[5];
+  long res = syscall(SYS_show_pgtable);
+  printf("System call returned %ld\n", res);
+	if (perf_ctl_fd != -1) {
+		ssize_t bytes_written = write(perf_ctl_fd, "enable\n", 8);
+    assert(bytes_written == 8);
+	}
+  if (perf_ack_fd != -1) {
+    ssize_t bytes_read = read(perf_ack_fd, ack, 5);
+    assert(bytes_read == 5 && strcmp(ack, "ack\n") == 0);
+  }
+  __asm__ volatile ("xchgq %r10, %r10");
+}
 
 /* Memory test operations */
 static int memory_init(void);
@@ -182,7 +210,12 @@ int memory_init(void)
       return 1;
     }
 
-    memset(buffer, 0, memory_block_size);
+    fprintf(stderr, "GOT RECORD STAGE VALUE: %d\n", record_stage);
+    memset(buffer, 0, (19 * (memory_block_size/20)));
+    if(record_stage == RECORD_LOADING_END) {
+      enable_perf();
+    }
+    memset(((void *)buffer) + (19 * (memory_block_size/20)), 0, (memory_block_size - (19 * (memory_block_size/20))));
   }
 
   thread_counters = malloc(sb_globals.threads * sizeof(uint64_t));

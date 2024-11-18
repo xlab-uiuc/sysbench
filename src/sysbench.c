@@ -126,7 +126,7 @@ sb_arg_t general_args[] =
          "information", NULL, STRING),
       SB_OPT("perf_ctl_fifo", "control fifo for perf", NULL, STRING),
           SB_OPT("perf_ack_fifo", "control fifo for perf", NULL, STRING),
-      SB_OPT("record_stage", "record stage 0 for nothing 1 for running, 2 for loading.", "1", INT),
+      SB_OPT("record_stage", "record stage 0 for nothing 1 for running, 2 for loading, 3 for loading end.", "1", INT),
   SB_OPT_END
 };
 
@@ -172,18 +172,16 @@ sb_timer_t sb_checkpoint_timer   CK_CC_CACHELINE;
 
 TLS int sb_tls_thread_id;
 
-int perf_ctl_fd = -1;
-int perf_ack_fd = -1;
-int record_stage = 1;
 
+/* PERF */
 #define RECORD_RUNNING 1
 #define RECORD_LOADING 2
-
-static void print_header(void);
-static void print_help(void);
-static void print_run_mode(sb_test_t *);
-
+#define RECORD_LOADING_END 3
 #define SYS_show_pgtable 600
+
+int record_stage = 1;
+int perf_ctl_fd = -1;
+int perf_ack_fd = -1;
 
 static void enable_perf(void)
 {
@@ -217,6 +215,10 @@ static void disable_perf(void)
     assert(bytes_read == 5 && strcmp(ack, "ack\n") == 0);
   }
 }
+
+static void print_header(void);
+static void print_help(void);
+static void print_run_mode(sb_test_t *);
 
 #ifdef HAVE_ALARM
 static void sigalrm_thread_init_timeout_handler(int sig)
@@ -1124,7 +1126,7 @@ static int run_test(sb_test_t *test)
   if (test->ops.init != NULL && test->ops.init() != 0)
     return 1;
 
-  if (record_stage == RECORD_LOADING) {
+  if (record_stage == RECORD_LOADING || record_stage == RECORD_LOADING_END) {
     disable_perf();
   }
   
